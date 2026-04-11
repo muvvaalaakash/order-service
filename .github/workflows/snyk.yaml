@@ -1,0 +1,24 @@
+name: Snyk
+on:
+  push:
+    branches:
+      - ci-pipelines
+ 
+jobs:
+  snyk-sca:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: npm install
+        
+ 
+      - name: Install Snyk CLI
+        uses: snyk/actions/setup@master
+ 
+      - name: Snyk Monitor
+        run: snyk monitor --all-project
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
