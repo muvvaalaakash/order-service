@@ -1,0 +1,69 @@
+name: Build Docker Image, Scan & Email Vulnerability Report
+ 
+on:
+  push:
+    branches:
+      - main
+      - ci-pipelines
+ 
+jobs:
+  docker-security-scan:
+    runs-on: ubuntu-latest
+ 
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+ 
+      - name: Build Docker image
+        run: |
+          docker build -t myapp:${{ github.sha }} .
+ 
+      # ✅ Install Trivy (Ubuntu 24.04 compatible)
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+ 
+      - name: Verify Trivy
+        run: |
+          trivy --version
+ 
+      # ✅ Download Trivy HTML template (REQUIRED)
+      - name: Download Trivy HTML template
+        run: |
+          mkdir -p trivy-templates
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl \
+            -o trivy-templates/html.tpl
+ 
+      # ✅ Scan Docker image and generate HTML report
+      - name: Scan Docker image
+        run: |
+          trivy image \
+            --format template \
+            --template "trivy-templates/html.tpl" \
+            --output trivy-vulnerability-report.html \
+            myapp:${{ github.sha }}
+ 
+      # ✅ Send vulnerability report via email
+      - name: Email vulnerability report
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "Docker Vulnerability Report - ${{ github.repository }}"
+          to: ${{ secrets.EMAIL_USERNAME }}
+          from: CI Scanner <${{ secrets.EMAIL_USERNAME }}>
+          body: |
+            Hi Team,
+ 
+            Please find the attached Docker vulnerability scan report.
+ 
+            Repository : ${{ github.repository }}
+            Commit     : ${{ github.sha }}
+            Branch     : ${{ github.ref_name }}
+ 
+            Regards,
+            GitHub Actions CI
+          attachments: trivy-vulnerability-report.html
