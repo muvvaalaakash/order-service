@@ -1,5 +1,4 @@
 name: Build, Scan & Push Secure Image (Invoice)
-
 on:
   workflow_dispatch:
     inputs:
