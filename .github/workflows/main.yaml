@@ -61,7 +61,7 @@ jobs:
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "✅ Pipeline Success: ${{ github.repository }}"
           body: |
-            Ashuthos says: SonarQube Scan Passed!
+            Result: SonarQube Scan Passed!
             Project: ${{ github.repository }}
             Status: All Quality Gates passed successfully.
             View Report: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=order_service
