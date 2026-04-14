@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - ci-pipelines
+      - main
   pull_request: # Highly recommended
     types: [opened, synchronize, reopened]
  
