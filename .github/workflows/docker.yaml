@@ -1,10 +1,15 @@
-name: Build Docker Image, Scan & Email Vulnerability Report
- 
+name: Build, Scan & Push Secure Image (Invoice)
+
 on:
-  push:
-    branches:
-      - main
-      - ci-pipelines
+  workflow_dispatch:
+    inputs:
+      docker_tag:
+        description: 'Docker Image Tag (e.g., v1.0.5)'
+        required: true
+        default: 'latest'
+
+env:
+  IMAGE_NAME: order
  
 jobs:
   docker-security-scan:
@@ -13,6 +18,13 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+
+        # Version (ONLY manual)
+      - name: Set Version
+        run: |
+          VERSION="${{ github.event.inputs.docker_tag }}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Manual trigger → using tag: $VERSION"
  
       - name: Build Docker image
         run: |
@@ -22,11 +34,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sudo sh -s -- -b /usr/local/bin
- 
-      - name: Verify Trivy
-        run: |
-          trivy --version
+          | sudo sh -s -- -b /usr/local/bin
  
       # ✅ Download Trivy HTML template (REQUIRED)
       - name: Download Trivy HTML template
@@ -34,6 +42,11 @@ jobs:
           mkdir -p trivy-templates
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl \
             -o trivy-templates/html.tpl
+            
+      # Scan (REAL FAIL)
+      - name: Trivy Scan
+        run: |
+          trivy image --exit-code 0 --severity HIGH,CRITICAL $IMAGE_NAME:${{ env.VERSION }}
  
       # ✅ Scan Docker image and generate HTML report
       - name: Scan Docker image
@@ -43,27 +56,52 @@ jobs:
             --template "trivy-templates/html.tpl" \
             --output trivy-vulnerability-report.html \
             myapp:${{ github.sha }}
+            
+      # Report
+      - name: Generate Report
+        if: success()
+        run: |
+          trivy image \
+            --format template \
+            --template "trivy-templates/html.tpl" \
+            --output trivy-report.html \
+            $IMAGE_NAME:${{ env.VERSION }}
+
+      # Docker Login
+      - name: Login to DockerHub
+        if: success()
+        run: |
+          echo ${{ secrets.DOCKER_PASSWORD }} | docker login \
+          -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+
+      # Push
+      - name: Push Image
+        if: success()
+        run: |
+          docker tag $IMAGE_NAME:${{ env.VERSION }} \
+          ${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:${{ env.VERSION }}
+
+          docker tag $IMAGE_NAME:${{ env.VERSION }} \
+          ${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:latest
+
+          docker push ${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:${{ env.VERSION }}
+          docker push ${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:latest
  
-      # ✅ Send vulnerability report via email
-      - name: Email vulnerability report
+     # Email
+      - name: Email Report
+        if: always()
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: ${{ secrets.SMTP_HOST }}
           server_port: ${{ secrets.SMTP_PORT }}
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "Docker Vulnerability Report - ${{ github.repository }}"
-          to: ${{ secrets.EMAIL_USERNAME }}
+          subject: "Invoice Scan Report - ${{ env.VERSION }}"
+          to: ${{ secrets.MAIL_TO }}
           from: CI Scanner <${{ secrets.EMAIL_USERNAME }}>
           body: |
-            Hi Team,
- 
-            Please find the attached Docker vulnerability scan report.
- 
-            Repository : ${{ github.repository }}
-            Commit     : ${{ github.sha }}
-            Branch     : ${{ github.ref_name }}
- 
-            Regards,
-            GitHub Actions CI
-          attachments: trivy-vulnerability-report.html
+            Repo   : ${{ github.repository }}
+            Commit : ${{ github.sha }}
+            Tag    : ${{ env.VERSION }}
+            Status : ${{ job.status }}
+          attachments: trivy-report.html
