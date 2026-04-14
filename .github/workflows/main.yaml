@@ -49,7 +49,7 @@ jobs:
             Check the logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           to: ${{ secrets.EMAIL_USERNAME }}
           from: DevOps Alert
- 
+          
       - name: Send Notification on Success
         if: success()
         uses: dawidd6/action-send-mail@v3
