@@ -1,5 +1,4 @@
-name: SonarQube Scan & Alert
- 
+name: SonarQube Scan & Alert 
 on:
   push:
     branches:
